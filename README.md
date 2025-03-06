@@ -1,12 +1,48 @@
-# React + Vite
+# Signalement de Nids-de-poule Lévis
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Une application web permettant aux citoyens de Lévis de signaler facilement les nids-de-poule qu'ils rencontrent lors de leurs déplacements.
 
-Currently, two official plugins are available:
+## À propos du projet
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Cette application simple et efficace permet aux utilisateurs de :
+- Enregistrer l'emplacement GPS des nids-de-poule en appuyant sur un bouton
+- Créer une liste de signalements pendant leur déplacement
+- Soumettre leurs observations aux responsables de la ville de Lévis
+- Utiliser un mode débogage pour tester l'application
 
-## Expanding the ESLint configuration
+## Technologies utilisées
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- React + Vite
+- JavaScript (React)
+- Services ArcGIS pour la soumission des données
+
+## Installation
+
+1. Cloner le dépôt :
+```bash
+git clone [url-du-depot]
+cd LevisPotholeSignal
+```
+
+2. Installer les dépendances :
+```bash
+npm install
+```
+
+3. Lancer l'application en mode développement :
+```bash
+npm run dev
+```
+
+## Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à :
+1. Fork le projet
+2. Créer une branche (`git checkout -b feature/AmeliorationSuggere`)
+3. Commit vos changements (`git commit -m 'Ajout d'une nouvelle fonctionnalité'`)
+4. Push vers la branche (`git push origin feature/AmeliorationSuggere`)
+5. Ouvrir une Pull Request
+
+## Licence
+
+Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.

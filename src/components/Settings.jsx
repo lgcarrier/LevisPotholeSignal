@@ -9,7 +9,7 @@ function Settings({ onSave, initialSettings }) {
     if (name && email.includes('@')) {
       onSave({ name, email })
     } else {
-      alert('Please enter a valid name and email')
+      alert('Veuillez entrer un nom et un courriel valide')
     }
   }
 
@@ -17,17 +17,17 @@ function Settings({ onSave, initialSettings }) {
     <form onSubmit={handleSubmit} className="settings">
       <input
         type="text"
-        placeholder="Full Name"
+        placeholder="Nom complet"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
       <input
         type="email"
-        placeholder="Email"
+        placeholder="Courriel"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <button type="submit">Save Settings</button>
+      <button type="submit">Enregistrer</button>
     </form>
   )
 }

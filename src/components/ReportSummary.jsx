@@ -10,7 +10,7 @@ function ReportSummary({ potholes, onReport }) {
 
   return (
     <div className="summary">
-      <h2>Potholes to Report ({potholes.length})</h2>
+      <h2>Nids-de-poule à signaler ({potholes.length})</h2>
       {potholes.map((pothole, index) => (
         <label key={index}>
           <input
@@ -24,12 +24,12 @@ function ReportSummary({ potholes, onReport }) {
               }
             }}
           />
-          Lat: {pothole.latitude.toFixed(4)}, Lon: {pothole.longitude.toFixed(4)}
+          Lat: {pothole.latitude.toFixed(4)}, Long: {pothole.longitude.toFixed(4)}
         </label>
       ))}
       <div className="summary-buttons">
         <button onClick={handleSubmit} disabled={selected.length === 0}>
-          Report Selected ({selected.length})
+          Signaler la sélection ({selected.length})
         </button>
       </div>
     </div>

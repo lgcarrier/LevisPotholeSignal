@@ -28,7 +28,7 @@ function PotholeLogger({ onLog, gpsReady }) {
       className={`log-button ${isLogging ? 'logging' : ''}`}
       disabled={isLogging}
     >
-      {isLogging ? 'Logging...' : 'Report Pothole'}
+      {isLogging ? 'Enregistrement...' : 'Signaler un nid-de-poule'}
     </button>
   )
 }

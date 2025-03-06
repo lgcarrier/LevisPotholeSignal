@@ -1,10 +1,10 @@
 function TravelControl({ isTraveling, onToggle }) {
     return (
       <button
-        onClick={onToggle}
-        className={`travel-button ${isTraveling ? 'stop' : 'start'}`}
+      onClick={onToggle}
+      className={`travel-button ${isTraveling ? 'stop' : 'start'}`}
       >
-        {isTraveling ? 'End Travel' : 'Start Travel'}
+      {isTraveling ? 'Arrêter le parcours' : 'Démarrer le parcours'}
       </button>
     )
   }

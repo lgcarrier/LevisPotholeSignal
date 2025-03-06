@@ -70,7 +70,7 @@ function App() {
         user: userSettings,
         potholes: selectedPotholes
       })
-      alert('Debug: Potholes reported successfully')
+      alert('Débogage : Nids-de-poule signalés avec succès')
       setPotholes([])
       return
     }
@@ -102,25 +102,25 @@ function App() {
       )
       const result = await response.json()
       if (result.addResults?.every(r => r.success)) {
-        alert('Potholes reported successfully')
+        alert('Nids-de-poule signalés avec succès')
         setPotholes([])
       } else {
-        alert('Error reporting potholes')
+        alert('Erreur lors du signalement des nids-de-poule')
       }
     } catch (error) {
-      alert('Network error: ' + error.message)
+      alert('Erreur réseau : ' + error.message)
     }
   }
 
   return (
     <div className="app">
-      <h1>Pothole Reporter</h1>
+      <h1>Signalement de nids-de-poule sur le territoire de la ville de Lévis (Québec).</h1>
       
       <button 
         className="menu-button"
         onClick={() => setShowSettings(!showSettings)}
       >
-        {showSettings ? 'Close' : 'Settings'}
+        {showSettings ? 'Fermer' : 'Paramètres'}
       </button>
 
       {(showSettings || !userSettings) && (
@@ -136,13 +136,13 @@ function App() {
           checked={debugMode}
           onChange={(e) => setDebugMode(e.target.checked)}
         />
-        Debug Mode
+        Mode débogage
       </label>
 
-      {gpsStatus === 'initializing' && <p>Initializing GPS...</p>}
-      {gpsStatus === 'ready' && <p className="success">GPS Ready</p>}
+      {gpsStatus === 'initializing' && <p>Initialisation du GPS...</p>}
+      {gpsStatus === 'ready' && <p className="success">GPS prêt</p>}
       {gpsStatus === 'unavailable' && (
-        <p className="error">GPS Unavailable - Logging may be slower</p>
+        <p className="error">GPS non disponible - L'enregistrement peut être plus lent</p>
       )}
       <TravelControl isTraveling={isTraveling} onToggle={toggleTravel} />
       {isTraveling && <PotholeLogger onLog={logPothole} gpsReady={gpsStatus === 'ready'} />}
