@@ -16,6 +16,10 @@ Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsable
 
 ## Fonctionnalités actuelles
 
+- Gate de consentement sécurité obligatoire au démarrage (session courante).
+- Confirmation explicite:
+  - ne pas utiliser l'application en conduisant
+  - si véhicule en mouvement, un passager utilise l'application
 - Configuration utilisateur (nom + courriel) avec persistance dans `localStorage`.
 - Initialisation GPS au chargement de l'application avec état:
   - `initializing`
@@ -23,13 +27,21 @@ Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsable
   - `unavailable` (timeout ou erreur navigateur)
 - Mode parcours:
   - démarrer/arrêter le trajet
+  - suivi de mouvement en continu (`watchPosition`)
+  - verrouillage de signalement si vitesse estimée `>= 5 km/h` sans confirmation passager
   - enregistrer des points GPS à la demande
 - Résumé des points capturés après arrêt du parcours:
-  - sélection/désélection des points à envoyer
-  - envoi de la sélection
-- Mode débogage:
+  - sélection/désélection des points à envoyer (tout sélectionner / tout désélectionner)
+  - simulation ou envoi de la sélection
+- Mode simulation sécurisé (par défaut):
   - n'appelle pas ArcGIS
   - simule la soumission et vide la liste locale
+  - permet d'ajouter un point de test GPS simulé
+- Soumission réelle protégée:
+  - nécessite `VITE_ALLOW_REAL_SUBMISSION=true`
+  - nécessite une confirmation utilisateur avant envoi
+- Barre d'actions mobile fixe:
+  - action principale contextuelle (`Démarrer`, `Signaler`, `Arrêter`, `Soumettre`)
 
 ## Stack technique
 
@@ -43,6 +55,7 @@ Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsable
 - Node.js (version récente, recommandé: 18+)
 - npm
 - Navigateur avec permission de géolocalisation activée
+- Optionnel pour activer l'envoi réel ArcGIS: variable d'environnement `VITE_ALLOW_REAL_SUBMISSION=true`
 
 ## Installation et démarrage
 
@@ -62,13 +75,15 @@ L'application sera disponible sur l'URL locale affichée par Vite (habituellemen
 
 ## Flux utilisateur
 
-1. Ouvrir l'application et enregistrer ses informations utilisateur.
-2. (Optionnel) Activer le mode débogage.
-3. Démarrer un parcours.
-4. Appuyer sur "Signaler un nid-de-poule" pour ajouter des points GPS.
-5. Arrêter le parcours.
-6. Sélectionner les points à transmettre.
-7. Envoyer la sélection.
+1. Ouvrir l'application et accepter le consentement sécurité.
+2. Enregistrer ou valider les informations utilisateur.
+3. Vérifier le mode simulation sécurisé (activé par défaut).
+4. Démarrer un parcours.
+5. Si mouvement détecté (`>= 5 km/h`), confirmer qu'un passager utilise l'application.
+6. Appuyer sur "Signaler un nid-de-poule" pour ajouter des points GPS ou "Ajouter un point de test".
+7. Arrêter le parcours.
+8. Sélectionner les points à transmettre.
+9. Simuler l'envoi (par défaut) ou signaler réellement si la soumission réelle est activée.
 
 ## Intégration ArcGIS
 
@@ -83,20 +98,28 @@ La soumission est effectuée par `src/App.jsx` via:
   - `courriel`
   - `Statut` (`Signale`)
 
+Par défaut, l'application reste en mode simulation et ne soumet aucun signalement réel.
+L'envoi réel n'est possible que si `VITE_ALLOW_REAL_SUBMISSION=true`.
+
 Important: cette intégration est utilisée ici pour un projet éducatif seulement. Pour un usage réel, privilégier les interfaces officielles de la Ville de Lévis.
 
 ## Structure du projet
 
 ```text
 src/
-  App.jsx                    # Etat global, logique GPS, soumission ArcGIS
+  App.jsx                    # Etat global, consentement, parcours, suivi mouvement, soumission ArcGIS
   main.jsx                   # Point d'entrée React
+  utils/
+    movement.js              # Calculs vitesse/état de mouvement + anti-jitter
   components/
-    Settings.jsx             # Formulaire utilisateur
+    SafetyConsentGate.jsx    # Consentement sécurité obligatoire
+    PassengerConfirmationModal.jsx # Confirmation passager en mouvement
+    Settings.jsx             # Formulaire profil avec validation inline
     TravelControl.jsx        # Démarrage/arrêt du parcours
-    PotholeLogger.jsx        # Capture d'un point GPS
+    PotholeLogger.jsx        # Capture d'un point GPS avec verrouillage sécurité
     ReportSummary.jsx        # Sélection et envoi des points capturés
   styles.css                 # Styles principaux utilisés
+  index.css                  # Base CSS neutre (sans preset Vite)
 ```
 
 ## Vérification avant contribution
