@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Settings from './components/Settings'
-import TravelControl from './components/TravelControl'
-import PotholeLogger from './components/PotholeLogger'
-import ReportSummary from './components/ReportSummary'
-import SafetyConsentGate from './components/SafetyConsentGate'
 import PassengerConfirmationModal from './components/PassengerConfirmationModal'
 import {
   MOVEMENT_SPEED_THRESHOLD_KMH,
@@ -16,39 +11,183 @@ import {
 const ARCGIS_ENDPOINT =
   'https://services1.arcgis.com/niuNnVx0H92jOc5F/arcgis/rest/services/NidDePouleSignale/FeatureServer/0/applyEdits'
 const REAL_SUBMISSION_ENABLED = import.meta.env.VITE_ALLOW_REAL_SUBMISSION === 'true'
+const PROFILE_STORAGE_KEY = 'userSettings'
 const SAFETY_CONSENT_STORAGE_KEY = 'safetyConsent.v1'
 const TEST_POINT_BASE = { latitude: 46.8123, longitude: -71.1776 }
+const INITIAL_PROFILE = { name: '', email: '' }
 
 const GPS_WARMUP_OPTIONS = { enableHighAccuracy: true, timeout: 10000 }
 const LOG_CAPTURE_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
 const WATCH_OPTIONS = { enableHighAccuracy: true, maximumAge: 1500, timeout: 12000 }
 
+const ROLE_OPTIONS = [
+  {
+    value: 'passenger',
+    title: 'Je suis passager',
+    description: "Le telephone est entre les mains d'un passager pendant le trajet.",
+    tone: 'safe',
+  },
+  {
+    value: 'stationary',
+    title: "Je suis a l'arret",
+    description: "Le vehicule est immobilise ou le signalement se fait a pied.",
+    tone: 'neutral',
+  },
+  {
+    value: 'driver',
+    title: 'Je conduis',
+    description: "L'application reste bloquee tant que la conduite est en cours.",
+    tone: 'warning',
+  },
+]
+
+const ROLE_LABELS = {
+  passenger: 'Passager',
+  stationary: "A l'arret",
+  driver: 'Conducteur',
+}
+
+function StatusBadge({ tone = 'neutral', children }) {
+  return <span className={`status-badge ${tone}`}>{children}</span>
+}
+
+function ScreenHeader({ title, copy }) {
+  return (
+    <header className="screen-header">
+      <p className="eyebrow">Ville de Levis (Quebec)</p>
+      <h1>{title}</h1>
+      <p className="screen-copy">{copy}</p>
+    </header>
+  )
+}
+
+function readSavedProfile() {
+  try {
+    const savedSettings = localStorage.getItem(PROFILE_STORAGE_KEY)
+    if (!savedSettings) {
+      return null
+    }
+
+    const parsedSettings = JSON.parse(savedSettings)
+    if (!parsedSettings?.name || !parsedSettings?.email) {
+      return null
+    }
+
+    return {
+      name: parsedSettings.name,
+      email: parsedSettings.email,
+    }
+  } catch {
+    return null
+  }
+}
+
+function readSavedSession() {
+  try {
+    const rawSession = sessionStorage.getItem(SAFETY_CONSENT_STORAGE_KEY)
+    if (!rawSession) {
+      return null
+    }
+
+    const parsedSession = JSON.parse(rawSession)
+    if (!parsedSession?.acceptedAt || !parsedSession?.role) {
+      return null
+    }
+
+    return parsedSession
+  } catch {
+    return null
+  }
+}
+
+function formatConsentTimestamp(value) {
+  if (!value) {
+    return 'Session non confirmee'
+  }
+
+  return new Date(value).toLocaleString('fr-CA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function gpsStatusLabel(status) {
+  if (status === 'ready') {
+    return 'GPS pret'
+  }
+  if (status === 'unavailable') {
+    return 'GPS limite'
+  }
+  return 'GPS initialisation'
+}
+
+function pointLabel(count) {
+  return count > 1 ? `${count} points` : `${count} point`
+}
+
+function potholeLabel(count) {
+  return count > 1 ? `${count} nids-de-poule` : `${count} nid-de-poule`
+}
+
+function modeSummaryLabel(isSafeMode) {
+  return isSafeMode ? 'Mode simulation' : 'Mode reel'
+}
+
+function validateProfile(profile) {
+  const nextErrors = {}
+
+  if (!profile?.name?.trim()) {
+    nextErrors.name = 'Le nom complet est requis.'
+  }
+
+  if (!profile?.email?.trim()) {
+    nextErrors.email = 'Le courriel est requis.'
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
+    nextErrors.email = 'Veuillez entrer un courriel valide.'
+  }
+
+  return nextErrors
+}
+
 function App() {
+  const [screen, setScreen] = useState('entry')
+  const [sessionRole, setSessionRole] = useState(null)
+  const [consentTimestamp, setConsentTimestamp] = useState(null)
+
   const [userSettings, setUserSettings] = useState(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [profileDraft, setProfileDraft] = useState(INITIAL_PROFILE)
+  const [profileErrors, setProfileErrors] = useState({})
+  const [isEditingProfile, setIsEditingProfile] = useState(true)
+
   const [isTraveling, setIsTraveling] = useState(false)
   const [potholes, setPotholes] = useState([])
   const [selectedIndexes, setSelectedIndexes] = useState([])
   const [simulationMode, setSimulationMode] = useState(true)
+  const [showSimulationTools, setShowSimulationTools] = useState(false)
+  const [reviewExpanded, setReviewExpanded] = useState(false)
+  const [resultState, setResultState] = useState(null)
+
   const [gpsStatus, setGpsStatus] = useState('initializing')
   const [feedback, setFeedback] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLogging, setIsLogging] = useState(false)
 
-  const [safetyConsent, setSafetyConsent] = useState(false)
-  const [consentTimestamp, setConsentTimestamp] = useState(null)
   const [movementState, setMovementState] = useState('stationary')
   const [passengerConfirmed, setPassengerConfirmed] = useState(false)
   const [watchId, setWatchId] = useState(null)
   const [showPassengerModal, setShowPassengerModal] = useState(false)
 
-  const consentMemoryRef = useRef(null)
   const gpsInitializedRef = useRef(false)
   const movementSampleRef = useRef(null)
   const passengerConfirmedRef = useRef(false)
   const movementNotifiedRef = useRef(false)
+  const nameInputRef = useRef(null)
+  const emailInputRef = useRef(null)
 
   const isSafeMode = simulationMode || !REAL_SUBMISSION_ENABLED
+  const hasAcceptedSession = sessionRole === 'passenger' || sessionRole === 'stationary'
   const selectedCount = selectedIndexes.length
   const selectedPotholes = useMemo(
     () => potholes.filter((_, index) => selectedIndexes.includes(index)),
@@ -58,25 +197,22 @@ function App() {
   const canLog = isTraveling && !isMovementLocked
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem('userSettings')
-    if (savedSettings) {
-      setUserSettings(JSON.parse(savedSettings))
+    const savedProfile = readSavedProfile()
+    if (savedProfile) {
+      setUserSettings(savedProfile)
+      setProfileDraft(savedProfile)
+      setIsEditingProfile(false)
     }
 
-    try {
-      const rawConsent = sessionStorage.getItem(SAFETY_CONSENT_STORAGE_KEY)
-      if (rawConsent) {
-        const parsedConsent = JSON.parse(rawConsent)
-        if (parsedConsent?.acceptedAt) {
-          setSafetyConsent(true)
-          setConsentTimestamp(parsedConsent.acceptedAt)
-        }
-      }
-    } catch {
-      if (consentMemoryRef.current?.acceptedAt) {
-        setSafetyConsent(true)
-        setConsentTimestamp(consentMemoryRef.current.acceptedAt)
-      }
+    const savedSession = readSavedSession()
+    if (!savedSession) {
+      return
+    }
+
+    setSessionRole(savedSession.role)
+    setConsentTimestamp(savedSession.acceptedAt)
+    if (savedSession.role === 'passenger' || savedSession.role === 'stationary') {
+      setScreen('setup')
     }
   }, [])
 
@@ -85,7 +221,20 @@ function App() {
   }, [passengerConfirmed])
 
   useEffect(() => {
-    if (gpsInitializedRef.current || !safetyConsent) {
+    if (!feedback) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(
+      () => setFeedback((current) => (current === feedback ? null : current)),
+      feedback.type === 'error' ? 5200 : 3200
+    )
+
+    return () => window.clearTimeout(timeoutId)
+  }, [feedback])
+
+  useEffect(() => {
+    if (gpsInitializedRef.current || !hasAcceptedSession) {
       return undefined
     }
 
@@ -96,28 +245,28 @@ function App() {
       return undefined
     }
 
-    const timeoutId = setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       setGpsStatus('unavailable')
       setFeedback({
         type: 'warning',
-        text: 'Initialisation GPS lente. Le suivi continuera en mode dégradé.',
+        text: 'Initialisation GPS lente. Le suivi continuera en mode degrade.',
       })
     }, 15000)
 
     navigator.geolocation.getCurrentPosition(
       () => {
-        clearTimeout(timeoutId)
+        window.clearTimeout(timeoutId)
         setGpsStatus('ready')
       },
       () => {
-        clearTimeout(timeoutId)
+        window.clearTimeout(timeoutId)
         setGpsStatus('unavailable')
       },
       GPS_WARMUP_OPTIONS
     )
 
-    return () => clearTimeout(timeoutId)
-  }, [safetyConsent])
+    return () => window.clearTimeout(timeoutId)
+  }, [hasAcceptedSession])
 
   useEffect(() => {
     if (!isTraveling) {
@@ -159,11 +308,12 @@ function App() {
       setMovementState(nextMovementState)
 
       if (moving && !passengerConfirmedRef.current) {
+        setShowSimulationTools(false)
         setShowPassengerModal(true)
         if (!movementNotifiedRef.current) {
           setFeedback({
             type: 'warning',
-            text: `Mouvement détecté (>= ${MOVEMENT_SPEED_THRESHOLD_KMH} km/h): confirmation passager requise.`,
+            text: `Mouvement detecte (>= ${MOVEMENT_SPEED_THRESHOLD_KMH} km/h). Confirmation passager requise.`,
           })
           movementNotifiedRef.current = true
         }
@@ -178,7 +328,7 @@ function App() {
       setGpsStatus('unavailable')
       setFeedback({
         type: 'warning',
-        text: `Suivi GPS limité: ${error.message}`,
+        text: `Suivi GPS limite: ${error.message}`,
       })
     }
 
@@ -194,75 +344,160 @@ function App() {
   const clearCapturedPotholes = useCallback(() => {
     setPotholes([])
     setSelectedIndexes([])
+    setReviewExpanded(false)
   }, [])
 
-  const handleSafetyConsent = () => {
-    const acceptedAt = new Date().toISOString()
-    setSafetyConsent(true)
-    setConsentTimestamp(acceptedAt)
-    consentMemoryRef.current = { acceptedAt }
+  const resetTravelSafetyState = useCallback(() => {
+    setMovementState('stationary')
+    setPassengerConfirmed(false)
+    setShowPassengerModal(false)
+    setShowSimulationTools(false)
+    movementSampleRef.current = null
+    movementNotifiedRef.current = false
+  }, [])
 
+  const focusFirstProfileError = useCallback((errors) => {
+    if (errors.name) {
+      window.setTimeout(() => nameInputRef.current?.focus(), 0)
+      return
+    }
+
+    if (errors.email) {
+      window.setTimeout(() => emailInputRef.current?.focus(), 0)
+    }
+  }, [])
+
+  const persistSessionChoice = useCallback((role, acceptedAt) => {
     try {
       sessionStorage.setItem(
         SAFETY_CONSENT_STORAGE_KEY,
         JSON.stringify({
           acceptedAt,
+          role,
         })
       )
     } catch {
-      // In-memory fallback is already active through state and consentMemoryRef.
+      // Session persistence is optional.
     }
-  }
+  }, [])
 
-  const handleSettingsSave = (settings) => {
-    setUserSettings(settings)
-    localStorage.setItem('userSettings', JSON.stringify(settings))
-    setShowSettings(false)
-    setFeedback({ type: 'success', text: 'Profil enregistré.' })
-  }
+  const saveProfile = useCallback((profile) => {
+    const normalizedProfile = {
+      name: profile.name.trim(),
+      email: profile.email.trim(),
+    }
+
+    setUserSettings(normalizedProfile)
+    setProfileDraft(normalizedProfile)
+    setProfileErrors({})
+    setIsEditingProfile(false)
+
+    try {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizedProfile))
+    } catch {
+      // Profile still remains available for the current session through state.
+    }
+
+    return normalizedProfile
+  }, [])
+
+  const handleRoleSelection = useCallback(
+    (role) => {
+      const acceptedAt = new Date().toISOString()
+      setSessionRole(role)
+      setConsentTimestamp(acceptedAt)
+      setFeedback(null)
+      setResultState(null)
+      persistSessionChoice(role, acceptedAt)
+      resetTravelSafetyState()
+      setIsTraveling(false)
+
+      if (role === 'driver') {
+        setScreen('entry')
+        return
+      }
+
+      setScreen('setup')
+      setIsEditingProfile(!(userSettings?.name && userSettings?.email))
+    },
+    [persistSessionChoice, resetTravelSafetyState, userSettings]
+  )
 
   const startTravel = useCallback(() => {
     setIsTraveling(true)
     clearCapturedPotholes()
-    setMovementState('stationary')
-    setPassengerConfirmed(false)
-    setShowPassengerModal(false)
-    movementSampleRef.current = null
-    movementNotifiedRef.current = false
-    setFeedback({ type: 'success', text: 'Parcours démarré.' })
-  }, [clearCapturedPotholes])
+    resetTravelSafetyState()
+    setScreen('active')
+    setResultState(null)
+    setFeedback({
+      type: 'success',
+      text: 'Parcours demarre. Utilisez seulement les actions essentielles.',
+    })
+  }, [clearCapturedPotholes, resetTravelSafetyState])
 
   const stopTravel = useCallback(() => {
     setIsTraveling(false)
-    setMovementState('stationary')
-    setPassengerConfirmed(false)
-    setShowPassengerModal(false)
-    movementSampleRef.current = null
-    movementNotifiedRef.current = false
-    setFeedback({ type: 'success', text: 'Parcours arrêté. Vérifiez les points avant soumission.' })
+    resetTravelSafetyState()
+    setScreen(potholes.length > 0 ? 'review' : 'setup')
+    setFeedback({
+      type: 'success',
+      text:
+        potholes.length > 0
+          ? 'Parcours arrete. Les points sont prets a etre verifies.'
+          : 'Parcours arrete.',
+    })
+  }, [potholes.length, resetTravelSafetyState])
+
+  const handleProfileChange = useCallback((field, value) => {
+    setProfileDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
+
+    setProfileErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      const nextErrors = { ...current }
+      delete nextErrors[field]
+      return nextErrors
+    })
   }, [])
 
-  const toggleTravel = useCallback(() => {
-    if (isTraveling) {
-      stopTravel()
-      return
-    }
+  const handleSetupSubmit = useCallback(
+    (event) => {
+      event?.preventDefault()
 
-    if (userSettings?.name && userSettings?.email) {
+      const profileCandidate = isEditingProfile || !userSettings ? profileDraft : userSettings
+      const nextErrors = validateProfile(profileCandidate)
+
+      if (Object.keys(nextErrors).length > 0) {
+        setProfileErrors(nextErrors)
+        setIsEditingProfile(true)
+        focusFirstProfileError(nextErrors)
+        return
+      }
+
+      if (isEditingProfile || !userSettings) {
+        saveProfile(profileCandidate)
+      }
+
       startTravel()
-      return
-    }
-
-    setShowSettings(true)
-    setFeedback({
-      type: 'warning',
-      text: 'Complétez votre profil avant de démarrer un parcours.',
-    })
-  }, [isTraveling, startTravel, stopTravel, userSettings])
+    },
+    [
+      focusFirstProfileError,
+      isEditingProfile,
+      profileDraft,
+      saveProfile,
+      startTravel,
+      userSettings,
+    ]
+  )
 
   const appendPothole = useCallback((position) => {
     setPotholes((previous) => [...previous, position])
-    setFeedback({ type: 'success', text: 'Point GPS enregistré.' })
+    setFeedback({ type: 'success', text: 'Nid-de-poule ajoute a la liste.' })
   }, [])
 
   const capturePotholeFromGps = useCallback(() => {
@@ -272,7 +507,7 @@ function App() {
     }
 
     if (!navigator.geolocation) {
-      setFeedback({ type: 'error', text: 'Géolocalisation non supportée sur cet appareil.' })
+      setFeedback({ type: 'error', text: 'Geolocalisation non supportee sur cet appareil.' })
       return
     }
 
@@ -298,7 +533,7 @@ function App() {
     )
   }, [appendPothole, canLog])
 
-  const addTestPothole = () => {
+  const addTestPothole = useCallback(() => {
     if (!canLog) {
       setShowPassengerModal(true)
       return
@@ -312,23 +547,51 @@ function App() {
       timestamp: new Date().toISOString(),
       simulated: true,
     })
-  }
 
-  const confirmPassenger = () => {
+    setShowSimulationTools(false)
+  }, [appendPothole, canLog])
+
+  const confirmPassenger = useCallback(() => {
     setPassengerConfirmed(true)
     setMovementState((current) => (current === 'moving' ? 'passenger-confirmed' : current))
     setShowPassengerModal(false)
     setFeedback({
       type: 'success',
-      text: 'Confirmation passager enregistrée pour ce parcours.',
+      text: 'Confirmation passager enregistree pour ce parcours.',
     })
-  }
+  }, [])
+
+  const toggleSelection = useCallback((index, checked) => {
+    setSelectedIndexes((current) => {
+      if (checked) {
+        return [...new Set([...current, index])].sort((left, right) => left - right)
+      }
+
+      return current.filter((item) => item !== index)
+    })
+  }, [])
+
+  const selectAllPotholes = useCallback(() => {
+    setSelectedIndexes(potholes.map((_, index) => index))
+  }, [potholes])
+
+  const clearSelectedPotholes = useCallback(() => {
+    setSelectedIndexes([])
+  }, [])
+
+  const beginNewReport = useCallback(() => {
+    clearCapturedPotholes()
+    setResultState(null)
+    setScreen('setup')
+    setFeedback(null)
+  }, [clearCapturedPotholes])
 
   const reportSelectedPotholes = useCallback(async () => {
     if (!selectedPotholes.length || isSubmitting) {
       return
     }
 
+    const handledCount = selectedPotholes.length
     setIsSubmitting(true)
 
     try {
@@ -337,21 +600,25 @@ function App() {
           user: userSettings,
           potholes: selectedPotholes,
         })
-        setFeedback({
-          type: 'success',
-          text: `Simulation réussie: ${selectedPotholes.length} nid(s)-de-poule traité(s).`,
+        setResultState({
+          title: 'Simulation terminee',
+          message: `${pointLabel(handledCount)} ${handledCount > 1 ? 'ont ete traites' : 'a ete traite'} sans envoi reel.`,
+          mode: 'safe',
+          count: handledCount,
         })
         clearCapturedPotholes()
+        setScreen('result')
         return
       }
 
       const shouldSubmit = window.confirm(
-        `Confirmer la soumission réelle de ${selectedPotholes.length} nid(s)-de-poule vers ArcGIS?`
+        `Confirmer la soumission reelle de ${handledCount} nid(s)-de-poule vers ArcGIS?`
       )
+
       if (!shouldSubmit) {
         setFeedback({
           type: 'warning',
-          text: 'Soumission annulée.',
+          text: 'Soumission annulee.',
         })
         return
       }
@@ -379,11 +646,14 @@ function App() {
       })
       const result = await response.json()
       if (result.addResults?.every((entry) => entry.success)) {
-        setFeedback({
-          type: 'success',
-          text: 'Nids-de-poule signalés avec succès.',
+        setResultState({
+          title: 'Signalement envoye',
+          message: `${pointLabel(handledCount)} ${handledCount > 1 ? 'ont ete envoyes' : 'a ete envoye'} vers ArcGIS.`,
+          mode: 'live',
+          count: handledCount,
         })
         clearCapturedPotholes()
+        setScreen('result')
       } else {
         setFeedback({
           type: 'error',
@@ -393,235 +663,480 @@ function App() {
     } catch (error) {
       setFeedback({
         type: 'error',
-        text: `Erreur réseau: ${error.message}`,
+        text: `Erreur reseau: ${error.message}`,
       })
     } finally {
       setIsSubmitting(false)
     }
   }, [clearCapturedPotholes, isSafeMode, isSubmitting, selectedPotholes, userSettings])
 
-  const primaryAction = useMemo(() => {
-    if (isTraveling) {
-      if (isMovementLocked) {
-        return {
-          label: 'Confirmer passager',
-          onClick: () => setShowPassengerModal(true),
-          disabled: false,
-          tone: 'warning',
-        }
-      }
+  const screenContent = (() => {
+    if (screen === 'entry') {
+      return (
+        <>
+          <ScreenHeader
+            title="Signalement mobile de nids-de-poule"
+            copy="Choisissez votre situation avant d'ouvrir le parcours mobile."
+          />
 
+          <section className="surface-card role-card">
+            <p className="section-kicker">Acces securise</p>
+            <div className="role-list">
+              {ROLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`role-option ${option.tone} ${
+                    sessionRole === option.value ? 'selected' : ''
+                  }`}
+                  onClick={() => handleRoleSelection(option.value)}
+                >
+                  <span className="role-title">{option.title}</span>
+                  <span className="role-copy">{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {sessionRole === 'driver' && (
+            <section className="surface-card tone-warning">
+              <p className="section-kicker">Protection</p>
+              <h2>Utilisation bloquee pendant la conduite</h2>
+              <p className="section-copy">
+                Passez l'appareil a un passager ou arretez-vous completement avant de poursuivre.
+              </p>
+            </section>
+          )}
+        </>
+      )
+    }
+
+    if (screen === 'setup') {
+      return (
+        <>
+          <ScreenHeader
+            title="Preparer le parcours"
+            copy="Gardez seulement l'essentiel avant de commencer le signalement."
+          />
+
+          <div className="status-cluster">
+            <StatusBadge tone="safe">{ROLE_LABELS[sessionRole]}</StatusBadge>
+            <StatusBadge tone={gpsStatus === 'ready' ? 'info' : gpsStatus === 'unavailable' ? 'warning' : 'neutral'}>
+              {gpsStatusLabel(gpsStatus)}
+            </StatusBadge>
+            <StatusBadge tone={isSafeMode ? 'safe' : 'accent'}>{modeSummaryLabel(isSafeMode)}</StatusBadge>
+          </div>
+
+          <form id="setup-profile-form" className="surface-card profile-card" noValidate onSubmit={handleSetupSubmit}>
+            <div className="row-between">
+              <div>
+                <p className="section-kicker">Session</p>
+                <h2>{ROLE_LABELS[sessionRole]}</h2>
+              </div>
+              <p className="timestamp-pill">{formatConsentTimestamp(consentTimestamp)}</p>
+            </div>
+
+            {!isEditingProfile && (
+              <p className="section-copy">
+                {sessionRole === 'passenger'
+                  ? "Le parcours restera bloque si le vehicule est en mouvement sans confirmation passager."
+                  : "Le parcours est prepare pour un usage a l'arret ou lors d'un transfert au passager."}
+              </p>
+            )}
+
+            {REAL_SUBMISSION_ENABLED ? (
+              <div className="mode-switch" role="group" aria-label="Mode de transmission">
+                <button
+                  type="button"
+                  className={isSafeMode ? 'active' : ''}
+                  onClick={() => setSimulationMode(true)}
+                >
+                  Simulation
+                </button>
+                <button
+                  type="button"
+                  className={!isSafeMode ? 'active' : ''}
+                  onClick={() => setSimulationMode(false)}
+                >
+                  Reel
+                </button>
+              </div>
+            ) : (
+              <div className="mode-readonly">
+                <StatusBadge tone="safe">Mode simulation securise</StatusBadge>
+                <p className="section-copy">Aucune soumission reelle n'est activee dans cette configuration.</p>
+              </div>
+            )}
+
+            <div className="card-divider" />
+
+            <div className="row-between">
+              <div>
+                <p className="section-kicker">Profil</p>
+                <h2>{isEditingProfile ? 'Profil' : 'Profil pret'}</h2>
+              </div>
+              {userSettings && !isEditingProfile && (
+                <button
+                  type="button"
+                  className="inline-link"
+                  onClick={() => {
+                    setIsEditingProfile(true)
+                    setProfileDraft(userSettings)
+                    setProfileErrors({})
+                  }}
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
+
+            {userSettings && !isEditingProfile ? (
+              <div className="profile-summary">
+                <p className="profile-name">{userSettings.name}</p>
+                <p className="profile-email">{userSettings.email}</p>
+              </div>
+            ) : (
+              <div className="profile-form-grid">
+                <label className="field">
+                  <span>Nom complet</span>
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    placeholder="Nom complet"
+                    value={profileDraft.name}
+                    onChange={(event) => handleProfileChange('name', event.target.value)}
+                    aria-invalid={Boolean(profileErrors.name)}
+                  />
+                  {profileErrors.name && <span className="field-error">{profileErrors.name}</span>}
+                </label>
+
+                <label className="field">
+                  <span>Courriel</span>
+                  <input
+                    ref={emailInputRef}
+                    type="email"
+                    placeholder="Courriel"
+                    value={profileDraft.email}
+                    onChange={(event) => handleProfileChange('email', event.target.value)}
+                    aria-invalid={Boolean(profileErrors.email)}
+                  />
+                  {profileErrors.email && <span className="field-error">{profileErrors.email}</span>}
+                </label>
+              </div>
+            )}
+          </form>
+        </>
+      )
+    }
+
+    if (screen === 'active') {
+      return (
+        <>
+          <ScreenHeader
+            title="Parcours actif"
+            copy="Ajoutez les nids-de-poule, puis touchez Revoir pour preparer la liste a transmettre."
+          />
+
+          <div className="status-cluster">
+            <StatusBadge tone={movementState === 'moving' ? 'warning' : movementState === 'passenger-confirmed' ? 'safe' : 'neutral'}>
+              {movementStateLabel(movementState)}
+            </StatusBadge>
+            <StatusBadge tone={gpsStatus === 'ready' ? 'info' : gpsStatus === 'unavailable' ? 'warning' : 'neutral'}>
+              {gpsStatusLabel(gpsStatus)}
+            </StatusBadge>
+            {watchId !== null && <StatusBadge tone="safe">Suivi actif</StatusBadge>}
+          </div>
+
+          <section className="surface-card hero-card">
+            <p className="section-kicker">Capture rapide</p>
+            <h2>{potholeLabel(potholes.length)} dans la liste</h2>
+            <p className="section-copy">
+              Touchez <strong>Ajouter un nid-de-poule</strong>, puis <strong>Revoir</strong> pour
+              verifier la liste avant {isSafeMode ? 'simulation' : 'soumission'}.
+            </p>
+            {!canLog && (
+              <p className="inline-note warning">
+                Le signalement est verrouille jusqu'a la confirmation passager.
+              </p>
+            )}
+          </section>
+
+          <section className="surface-card compact-card">
+            <div className="row-between">
+              <div>
+                <p className="section-kicker">Mode</p>
+                <h2>{isSafeMode ? 'Simulation securisee' : 'Soumission reelle'}</h2>
+              </div>
+              {isSafeMode && (
+                <button
+                  type="button"
+                  className="inline-link"
+                  onClick={() => setShowSimulationTools(true)}
+                >
+                  Outils de simulation
+                </button>
+              )}
+            </div>
+
+            <p className="section-copy">
+              {isSafeMode
+                ? "Les nids-de-poule ajoutes restent locaux tant que vous demeurez dans le mode simulation."
+                : "Les nids-de-poule ajoutes pourront etre soumis a ArcGIS apres Revoir."}
+            </p>
+
+            {gpsStatus !== 'ready' && (
+              <p className="inline-note">
+                GPS en mode degrade: l'enregistrement peut etre plus lent sur cet appareil.
+              </p>
+            )}
+          </section>
+        </>
+      )
+    }
+
+    if (screen === 'review') {
+      return (
+        <>
+          <ScreenHeader
+            title="Verifier la liste"
+            copy={`Quand la liste est prete, touchez ${
+              isSafeMode ? 'Simuler la liste' : 'Soumettre la liste'
+            }.`}
+          />
+
+          <div className="status-cluster">
+            <StatusBadge tone={isSafeMode ? 'safe' : 'accent'}>{modeSummaryLabel(isSafeMode)}</StatusBadge>
+            <StatusBadge tone="neutral">{pointLabel(potholes.length)} pret(s)</StatusBadge>
+          </div>
+
+          <section className="surface-card hero-card">
+            <p className="section-kicker">Pret a transmettre</p>
+            <h2>{potholeLabel(selectedCount)} selectionne(s)</h2>
+            <p className="section-copy">
+              La selection complete est activee par defaut pour aller plus vite.
+            </p>
+            <button
+              type="button"
+              className="secondary-chip"
+              onClick={() => setReviewExpanded((current) => !current)}
+            >
+              {reviewExpanded ? 'Masquer le detail' : 'Modifier la selection'}
+            </button>
+          </section>
+
+          {reviewExpanded && (
+            <section className="surface-card review-card">
+              <div className="summary-toolbar">
+                <button type="button" className="secondary-chip" onClick={selectAllPotholes}>
+                  Tout selectionner
+                </button>
+                <button type="button" className="secondary-chip" onClick={clearSelectedPotholes}>
+                  Tout deselectionner
+                </button>
+              </div>
+
+              <div className="summary-list">
+                {potholes.map((pothole, index) => (
+                  <label key={index} className="summary-item">
+                    <input
+                      type="checkbox"
+                      checked={selectedIndexes.includes(index)}
+                      onChange={(event) => toggleSelection(index, event.target.checked)}
+                    />
+                    <span className="summary-item-text">
+                      <strong>Point {index + 1}</strong>
+                      <span>
+                        Lat: {pothole.latitude.toFixed(4)}, Long: {pothole.longitude.toFixed(4)}
+                      </span>
+                      {pothole.simulated && <span className="simulated-tag">Point simule</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {selectedCount === 0 && (
+            <p className="inline-note warning">
+              Selectionnez au moins un point avant de continuer.
+            </p>
+          )}
+        </>
+      )
+    }
+
+    return (
+      <>
+        <ScreenHeader
+          title={resultState?.title || 'Traitement termine'}
+          copy="Le flux est complete. Vous pouvez repartir rapidement vers un nouveau parcours."
+        />
+
+        <section className="surface-card result-card">
+          <div className={`result-count ${resultState?.mode || 'safe'}`}>
+            <span>{resultState?.count ?? 0}</span>
+          </div>
+          <div className="result-copy">
+            <p className="section-kicker">{resultState?.mode === 'live' ? 'ArcGIS' : 'Simulation'}</p>
+            <h2>{resultState?.message || 'Aucun resultat a afficher.'}</h2>
+            <p className="section-copy">
+              {resultState?.mode === 'live'
+                ? "Les points ont ete traites et le prochain parcours peut etre prepare."
+                : "Aucune soumission reelle n'a ete envoyee dans ce mode."}
+            </p>
+          </div>
+        </section>
+
+        <div className="status-cluster">
+          <StatusBadge tone={resultState?.mode === 'live' ? 'accent' : 'safe'}>
+            {resultState?.mode === 'live' ? 'Envoi confirme' : 'Mode simulation'}
+          </StatusBadge>
+          <StatusBadge tone="neutral">{userSettings?.name || 'Profil conserve'}</StatusBadge>
+        </div>
+      </>
+    )
+  })()
+
+  const actionBar = (() => {
+    if (showPassengerModal) {
+      return null
+    }
+
+    if (screen === 'setup') {
       return {
-        label: isLogging ? 'Enregistrement...' : 'Signaler',
-        onClick: capturePotholeFromGps,
-        disabled: isLogging,
-        tone: 'accent',
+        primary: {
+          label: 'Commencer le parcours',
+          type: 'submit',
+          form: 'setup-profile-form',
+        },
       }
     }
 
-    if (potholes.length > 0) {
+    if (screen === 'active') {
       return {
-        label: isSafeMode ? `Simuler (${selectedCount})` : `Soumettre (${selectedCount})`,
-        onClick: reportSelectedPotholes,
-        disabled: selectedCount === 0 || isSubmitting,
-        tone: 'success',
+        secondary: {
+          label: potholes.length > 0 ? `Revoir (${potholes.length})` : 'Terminer',
+          onClick: stopTravel,
+          tone: 'secondary',
+        },
+        primary: {
+          label: isLogging ? 'Ajout...' : 'Ajouter un nid-de-poule',
+          onClick: capturePotholeFromGps,
+          disabled: isLogging || !canLog,
+          tone: 'accent',
+        },
       }
     }
 
-    return {
-      label: 'Démarrer',
-      onClick: toggleTravel,
-      disabled: false,
-      tone: 'accent',
-    }
-  }, [
-    capturePotholeFromGps,
-    isLogging,
-    isMovementLocked,
-    isSafeMode,
-    isSubmitting,
-    isTraveling,
-    potholes.length,
-    selectedCount,
-    reportSelectedPotholes,
-    toggleTravel,
-  ])
-
-  const secondaryAction = useMemo(() => {
-    if (isTraveling) {
+    if (screen === 'review') {
       return {
-        label: 'Arrêter',
-        onClick: stopTravel,
-        disabled: false,
+        primary: {
+          label: isSubmitting
+            ? 'Transmission...'
+            : isSafeMode
+              ? `Simuler la liste (${selectedCount})`
+              : `Soumettre la liste (${selectedCount})`,
+          onClick: reportSelectedPotholes,
+          disabled: selectedCount === 0 || isSubmitting,
+          tone: isSafeMode ? 'safe' : 'accent',
+        },
       }
     }
 
-    if (potholes.length > 0) {
+    if (screen === 'result') {
       return {
-        label: 'Démarrer',
-        onClick: toggleTravel,
-        disabled: isSubmitting,
+        primary: {
+          label: 'Nouveau parcours',
+          onClick: beginNewReport,
+          tone: 'accent',
+        },
       }
     }
 
     return null
-  }, [isSubmitting, isTraveling, potholes.length, stopTravel, toggleTravel])
+  })()
 
-  const consentDetails = consentTimestamp
-    ? new Date(consentTimestamp).toLocaleString('fr-CA')
-    : 'Non confirmé'
-
-  if (!safetyConsent) {
-    return <SafetyConsentGate onContinue={handleSafetyConsent} />
-  }
+  const appClassName = [
+    'app-shell',
+    `screen-${screen}`,
+    actionBar ? 'has-action-bar' : '',
+    reviewExpanded ? 'is-review-expanded' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <p className="eyebrow">Ville de Lévis (Québec)</p>
-        <h1>Signalement mobile de nids-de-poule</h1>
-        <p className="subhead">Parcours rapide, saisie sécurisée, soumission guidée.</p>
-      </header>
-
-      <div className="status-ribbon">
-        <span className={`badge movement ${movementState}`}>{movementStateLabel(movementState)}</span>
-        <span className={`badge gps ${gpsStatus}`}>
-          {gpsStatus === 'ready'
-            ? 'GPS prêt'
-            : gpsStatus === 'unavailable'
-              ? 'GPS limité'
-              : 'GPS initialisation'}
-        </span>
-        {watchId !== null && isTraveling && <span className="badge neutral">Suivi actif</span>}
-      </div>
+    <div className={appClassName}>
+      <main className="screen-shell">{screenContent}</main>
 
       {feedback && (
-        <p className={`feedback-banner ${feedback.type}`} aria-live="polite">
+        <div
+          className={`feedback-toast ${feedback.type} ${actionBar ? 'with-action-bar' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
           {feedback.text}
-        </p>
+        </div>
       )}
 
-      <section className="card">
-        <h2>Sécurité</h2>
-        <p className="section-copy">
-          Consentement session: <strong>{consentDetails}</strong>
-        </p>
+      {actionBar && (
+        <div
+          key={`${screen}-${actionBar.primary.label}`}
+          className={`sticky-action-bar ${actionBar.secondary ? 'double' : 'single'}`}
+          role="group"
+          aria-label="Actions principales"
+        >
+          {actionBar.secondary && (
+            <button
+              type="button"
+              className="secondary-cta action-secondary"
+              onClick={actionBar.secondary.onClick}
+              disabled={actionBar.secondary.disabled}
+            >
+              {actionBar.secondary.label}
+            </button>
+          )}
 
-        <label className="mode-toggle">
-          <input
-            type="checkbox"
-            checked={isSafeMode}
-            disabled={!REAL_SUBMISSION_ENABLED}
-            onChange={(event) => setSimulationMode(event.target.checked)}
-          />
-          Mode simulation sécurisé
-        </label>
+          <button
+            type={actionBar.primary.type || 'button'}
+            form={actionBar.primary.form}
+            className={`primary-cta action-primary ${actionBar.primary.tone || 'accent'}`}
+            onClick={actionBar.primary.onClick}
+            disabled={actionBar.primary.disabled}
+          >
+            {actionBar.primary.label}
+          </button>
+        </div>
+      )}
 
-        <p className={`mode-status ${isSafeMode ? 'safe' : 'live'}`}>
-          {isSafeMode
-            ? 'Simulation active: aucune soumission réelle.'
-            : 'Soumission réelle ArcGIS activée.'}
-        </p>
-
-        {!REAL_SUBMISSION_ENABLED && (
-          <p className="mode-note">
-            Soumission réelle désactivée par configuration (`VITE_ALLOW_REAL_SUBMISSION=true`).
-          </p>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Profil</h2>
-        {userSettings && !showSettings ? (
-          <div className="profile-summary">
-            <p>
-              <strong>{userSettings.name}</strong>
+      {showSimulationTools && isSafeMode && (
+        <div className="sheet-backdrop" role="presentation" onClick={() => setShowSimulationTools(false)}>
+          <div
+            className="sheet-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="simulation-tools-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="section-kicker">Mode simulation</p>
+            <h2 id="simulation-tools-title">Outils de simulation</h2>
+            <p className="section-copy">
+              Les outils avances restent separes du flux principal pour garder l'ecran simple.
             </p>
-            <p>{userSettings.email}</p>
-            <button type="button" className="secondary-cta" onClick={() => setShowSettings(true)}>
-              Modifier le profil
+
+            <button type="button" className="primary-cta sheet-button" onClick={addTestPothole}>
+              Ajouter un nid-de-poule simule
+            </button>
+            <button
+              type="button"
+              className="secondary-cta sheet-button"
+              onClick={() => setShowSimulationTools(false)}
+            >
+              Fermer
             </button>
           </div>
-        ) : (
-          <Settings
-            onSave={handleSettingsSave}
-            initialSettings={userSettings || { name: '', email: '' }}
-          />
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Parcours</h2>
-        <p className="section-copy">
-          {isTraveling
-            ? 'Parcours en cours. Signalez les points en toute sécurité.'
-            : 'Démarrez un parcours pour activer la capture GPS.'}
-        </p>
-        <TravelControl isTraveling={isTraveling} onToggle={toggleTravel} />
-      </section>
-
-      <section className="card">
-        <h2>Signalements</h2>
-        {isTraveling ? (
-          <PotholeLogger
-            onRequestLog={capturePotholeFromGps}
-            onRequestTestLog={addTestPothole}
-            gpsReady={gpsStatus === 'ready'}
-            simulationMode={isSafeMode}
-            canLog={canLog}
-            isLogging={isLogging}
-            movementState={movementState}
-            onPassengerConfirmRequest={() => setShowPassengerModal(true)}
-          />
-        ) : potholes.length > 0 ? (
-          <p className="section-copy">{potholes.length} point(s) capturé(s). Passez à la soumission.</p>
-        ) : (
-          <p className="empty-state">
-            Aucun point enregistré. Démarrez un parcours puis utilisez le bouton Signaler.
-          </p>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Soumission</h2>
-        {!isTraveling && potholes.length > 0 ? (
-          <ReportSummary
-            potholes={potholes}
-            selectedIndexes={selectedIndexes}
-            onSelectionChange={setSelectedIndexes}
-            onReport={reportSelectedPotholes}
-            simulationMode={isSafeMode}
-            isSubmitting={isSubmitting}
-          />
-        ) : isTraveling ? (
-          <p className="empty-state">Arrêtez le parcours pour réviser et soumettre vos points.</p>
-        ) : (
-          <p className="empty-state">
-            Votre prochain signalement apparaîtra ici avec les options de sélection.
-          </p>
-        )}
-      </section>
-
-      <div className="sticky-action-bar" role="group" aria-label="Actions principales">
-        {secondaryAction && (
-          <button
-            type="button"
-            className="secondary-cta action-secondary"
-            onClick={secondaryAction.onClick}
-            disabled={secondaryAction.disabled}
-          >
-            {secondaryAction.label}
-          </button>
-        )}
-        <button
-          type="button"
-          className={`primary-cta action-primary ${primaryAction.tone}`}
-          onClick={primaryAction.onClick}
-          disabled={primaryAction.disabled}
-        >
-          {primaryAction.label}
-        </button>
-      </div>
+        </div>
+      )}
 
       <PassengerConfirmationModal
         isOpen={showPassengerModal}

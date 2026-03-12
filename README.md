@@ -1,6 +1,6 @@
 # Signalement de nids-de-poule sur le territoire de Lévis
 
-Application web React qui permet de capturer des positions GPS de nids-de-poule pendant un parcours, puis de transmettre une sélection de points vers un service ArcGIS.
+Application web React mobile-first qui permet a un passager de capturer des positions GPS de nids-de-poule pendant un parcours, puis de transmettre une liste de points vers un service ArcGIS.
 
 ## Avis important
 
@@ -16,32 +16,41 @@ Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsable
 
 ## Fonctionnalités actuelles
 
-- Gate de consentement sécurité obligatoire au démarrage (session courante).
-- Confirmation explicite:
-  - ne pas utiliser l'application en conduisant
-  - si véhicule en mouvement, un passager utilise l'application
+- Parcours mobile simplifie en 5 ecrans:
+  - entree de contexte
+  - preparation du parcours
+  - parcours actif
+  - revision de la liste
+  - resultat
+- Entree securisee par contexte au demarrage:
+  - `Je suis passager`
+  - `Je suis a l'arret`
+  - `Je conduis` (etat bloque, sans acces au signalement)
 - Configuration utilisateur (nom + courriel) avec persistance dans `localStorage`.
 - Initialisation GPS au chargement de l'application avec état:
   - `initializing`
   - `ready`
   - `unavailable` (timeout ou erreur navigateur)
-- Mode parcours:
-  - démarrer/arrêter le trajet
+- Mode parcours actif:
+  - demarrer un trajet depuis l'ecran de preparation
   - suivi de mouvement en continu (`watchPosition`)
-  - verrouillage de signalement si vitesse estimée `>= 5 km/h` sans confirmation passager
-  - enregistrer des points GPS à la demande
-- Résumé des points capturés après arrêt du parcours:
-  - sélection/désélection des points à envoyer (tout sélectionner / tout désélectionner)
-  - simulation ou envoi de la sélection
+  - verrouillage de capture si vitesse estimee `>= 5 km/h` sans confirmation passager
+  - action principale `Ajouter un nid-de-poule`
+  - action secondaire `Revoir (n)` des qu'au moins un element est capture
+- Ecran de revision:
+  - liste preselectionnee par defaut
+  - details optionnels pour ajuster la selection
+  - action finale `Simuler la liste` ou `Soumettre la liste`
 - Mode simulation sécurisé (par défaut):
   - n'appelle pas ArcGIS
   - simule la soumission et vide la liste locale
-  - permet d'ajouter un point de test GPS simulé
+  - permet d'ajouter un nid-de-poule simule via `Outils de simulation`
 - Soumission réelle protégée:
   - nécessite `VITE_ALLOW_REAL_SUBMISSION=true`
   - nécessite une confirmation utilisateur avant envoi
 - Barre d'actions mobile fixe:
-  - action principale contextuelle (`Démarrer`, `Signaler`, `Arrêter`, `Soumettre`)
+  - une seule action principale contextuelle par ecran
+  - libelles orientes flux: `Commencer le parcours`, `Ajouter un nid-de-poule`, `Revoir`, `Simuler la liste`, `Soumettre la liste`
 
 ## Stack technique
 
@@ -75,15 +84,15 @@ L'application sera disponible sur l'URL locale affichée par Vite (habituellemen
 
 ## Flux utilisateur
 
-1. Ouvrir l'application et accepter le consentement sécurité.
-2. Enregistrer ou valider les informations utilisateur.
-3. Vérifier le mode simulation sécurisé (activé par défaut).
-4. Démarrer un parcours.
-5. Si mouvement détecté (`>= 5 km/h`), confirmer qu'un passager utilise l'application.
-6. Appuyer sur "Signaler un nid-de-poule" pour ajouter des points GPS ou "Ajouter un point de test".
-7. Arrêter le parcours.
-8. Sélectionner les points à transmettre.
-9. Simuler l'envoi (par défaut) ou signaler réellement si la soumission réelle est activée.
+1. Ouvrir l'application et choisir le contexte de depart (`passager`, `a l'arret`, `conducteur`).
+2. Valider ou modifier le profil utilisateur.
+3. Verifier le mode simulation (active par defaut).
+4. Commencer le parcours.
+5. Pendant le trajet, ajouter des nids-de-poule un par un.
+6. Si mouvement detecte (`>= 5 km/h`), confirmer qu'un passager utilise l'application.
+7. Appuyer sur `Revoir` pour ouvrir la liste capturee.
+8. Ajuster la selection si necessaire.
+9. Simuler la liste (par defaut) ou soumettre la liste si la soumission reelle est activee.
 
 ## Intégration ArcGIS
 
@@ -107,17 +116,13 @@ Important: cette intégration est utilisée ici pour un projet éducatif seuleme
 
 ```text
 src/
-  App.jsx                    # Etat global, consentement, parcours, suivi mouvement, soumission ArcGIS
+  App.jsx                    # Etat global, flow mobile 5 ecrans, parcours, suivi mouvement, soumission ArcGIS
   main.jsx                   # Point d'entrée React
   utils/
     movement.js              # Calculs vitesse/état de mouvement + anti-jitter
   components/
-    SafetyConsentGate.jsx    # Consentement sécurité obligatoire
     PassengerConfirmationModal.jsx # Confirmation passager en mouvement
-    Settings.jsx             # Formulaire profil avec validation inline
-    TravelControl.jsx        # Démarrage/arrêt du parcours
-    PotholeLogger.jsx        # Capture d'un point GPS avec verrouillage sécurité
-    ReportSummary.jsx        # Sélection et envoi des points capturés
+    ...                      # Composants secondaires et iterations precedentes conserves dans le repo
   styles.css                 # Styles principaux utilisés
   index.css                  # Base CSS neutre (sans preset Vite)
 ```
