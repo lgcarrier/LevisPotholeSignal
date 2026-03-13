@@ -189,41 +189,64 @@ function PotholeMapPreview({
 
       {points.length > 0 ? (
         <div className="map-preview-links">
-          {points.map((point) => (
-            <div
-              key={point.sourceIndex}
-              className={`map-point-actions ${
-                editingPointIndex === point.sourceIndex ? 'editing' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className={`secondary-chip map-point-chip ${
-                  editingPointIndex === point.sourceIndex ? 'active' : ''
-                }`}
-                onClick={() => onBeginPointEdit(point.sourceIndex)}
-                disabled={isEditLocked && editingPointIndex !== point.sourceIndex}
-              >
-                {editingPointIndex === point.sourceIndex
-                  ? `${point.label} en cours`
-                  : `Ajuster ${point.label}`}
-              </button>
+          {points.map((point) => {
+            const isEditingPoint = editingPointIndex === point.sourceIndex
 
-              {editingPointIndex === point.sourceIndex ? (
-                <span className="map-point-status">Deplacement en cours</span>
-              ) : (
-                <a
-                  className="inline-link map-point-link"
-                  href={buildGoogleMapsSearchUrl(point)}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`Ouvrir ${point.label} dans Google Maps`}
-                >
-                  Google Maps
-                </a>
-              )}
-            </div>
-          ))}
+            return (
+              <article
+                key={point.sourceIndex}
+                className={`map-point-card ${isEditingPoint ? 'editing' : ''}`}
+              >
+                <div className="map-point-card-header">
+                  <div className="map-point-card-heading">
+                    <span className={`map-point-pill ${isEditingPoint ? 'active' : ''}`}>
+                      {point.shortLabel}
+                    </span>
+                    <div className="map-point-card-title">
+                      <strong>{point.label}</strong>
+                      <span>
+                        {isEditingPoint
+                          ? 'Ajustement en cours sur la carte'
+                          : 'Point pret a etre verifie ou ouvert dans Google Maps'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isEditingPoint && <span className="map-point-state">Actif</span>}
+                </div>
+
+                <div className="map-point-card-meta" aria-label={`Coordonnees de ${point.label}`}>
+                  <span className="map-point-coordinate">Lat {formatCoordinate(point.latitude)}</span>
+                  <span className="map-point-coordinate">Long {formatCoordinate(point.longitude)}</span>
+                </div>
+
+                <div className="map-point-card-actions">
+                  <button
+                    type="button"
+                    className={`secondary-chip map-point-chip ${isEditingPoint ? 'active' : ''}`}
+                    onClick={() => onBeginPointEdit(point.sourceIndex)}
+                    disabled={isEditLocked && !isEditingPoint}
+                  >
+                    {isEditingPoint ? 'Ajustement actif' : 'Ajuster le point'}
+                  </button>
+
+                  {isEditingPoint ? (
+                    <span className="map-point-status">Ajustement en cours</span>
+                  ) : (
+                    <a
+                      className="inline-link map-point-link"
+                      href={buildGoogleMapsSearchUrl(point)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Ouvrir ${point.label} dans Google Maps`}
+                    >
+                      Google Maps
+                    </a>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       ) : (
         <p className="inline-note">Selectionnez au moins un point pour afficher la carte.</p>
