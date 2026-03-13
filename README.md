@@ -36,7 +36,7 @@ La collecte de nom, courriel et position GPS dans cette application releve de ce
   - `Je suis passager`
   - `Je suis a l'arret`
   - `Je conduis` (etat bloque, sans acces au signalement)
-- Configuration utilisateur (nom + courriel) avec persistance dans `localStorage`.
+- Configuration utilisateur (nom + courriel) conservee pour la session, avec option de memorisation locale pendant 30 jours.
 - Initialisation GPS au chargement de l'application avec état:
   - `initializing`
   - `ready`

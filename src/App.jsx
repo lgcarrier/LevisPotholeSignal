@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PassengerConfirmationModal from './components/PassengerConfirmationModal'
 import PotholeMapPreview from './components/PotholeMapPreview'
 import { buildArcGisAddsPayload, isSuccessfulArcGisAddResponse } from './utils/arcgis'
+import {
+  persistProfile,
+  PROFILE_REMEMBER_DURATION_DAYS,
+  readStoredProfile,
+} from './utils/profileStorage'
 import { updatePotholePosition } from './utils/potholes'
 import {
   MOVEMENT_SPEED_THRESHOLD_KMH,
@@ -14,7 +19,6 @@ import {
 const ARCGIS_ENDPOINT =
   'https://services1.arcgis.com/niuNnVx0H92jOc5F/arcgis/rest/services/NidDePouleSignale/FeatureServer/0/applyEdits'
 const REAL_SUBMISSION_ENABLED = import.meta.env.VITE_ALLOW_REAL_SUBMISSION === 'true'
-const PROFILE_STORAGE_KEY = 'userSettings'
 const SAFETY_CONSENT_STORAGE_KEY = 'safetyConsent.v1'
 const TEST_POINT_BASE = { latitude: 46.8123, longitude: -71.1776 }
 const INITIAL_PROFILE = { firstName: '', lastName: '', email: '' }
@@ -72,28 +76,6 @@ function AdvisoryNotice({ title, children }) {
       {children}
     </section>
   )
-}
-
-function readSavedProfile() {
-  try {
-    const savedSettings = localStorage.getItem(PROFILE_STORAGE_KEY)
-    if (!savedSettings) {
-      return null
-    }
-
-    const parsedSettings = JSON.parse(savedSettings)
-    if (!parsedSettings?.firstName || !parsedSettings?.lastName || !parsedSettings?.email) {
-      return null
-    }
-
-    return {
-      firstName: parsedSettings.firstName,
-      lastName: parsedSettings.lastName,
-      email: parsedSettings.email,
-    }
-  } catch {
-    return null
-  }
 }
 
 function formatDisplayName(profile) {
@@ -190,6 +172,7 @@ function App() {
   const [profileDraft, setProfileDraft] = useState(INITIAL_PROFILE)
   const [profileErrors, setProfileErrors] = useState({})
   const [isEditingProfile, setIsEditingProfile] = useState(true)
+  const [rememberProfile, setRememberProfile] = useState(false)
 
   const [isTraveling, setIsTraveling] = useState(false)
   const [potholes, setPotholes] = useState([])
@@ -255,10 +238,11 @@ function App() {
   const canLog = isTraveling && !isMovementLocked
 
   useEffect(() => {
-    const savedProfile = readSavedProfile()
+    const savedProfile = readStoredProfile()
     if (savedProfile) {
-      setUserSettings(savedProfile)
-      setProfileDraft(savedProfile)
+      setUserSettings(savedProfile.profile)
+      setProfileDraft(savedProfile.profile)
+      setRememberProfile(savedProfile.rememberProfile)
       setIsEditingProfile(false)
     }
 
@@ -466,25 +450,39 @@ function App() {
   }, [])
 
   const saveProfile = useCallback((profile) => {
-    const normalizedProfile = {
-      firstName: profile.firstName.trim(),
-      lastName: profile.lastName.trim(),
-      email: profile.email.trim(),
-    }
+    const normalizedProfile =
+      persistProfile({
+        profile,
+        rememberProfile,
+      }) ?? {
+        firstName: profile.firstName.trim(),
+        lastName: profile.lastName.trim(),
+        email: profile.email.trim(),
+      }
 
     setUserSettings(normalizedProfile)
     setProfileDraft(normalizedProfile)
     setProfileErrors({})
     setIsEditingProfile(false)
 
-    try {
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizedProfile))
-    } catch {
-      // Profile still remains available for the current session through state.
+    return normalizedProfile
+  }, [rememberProfile])
+
+  const keepProfileForSessionOnly = useCallback(() => {
+    if (!userSettings) {
+      return
     }
 
-    return normalizedProfile
-  }, [])
+    persistProfile({
+      profile: userSettings,
+      rememberProfile: false,
+    })
+    setRememberProfile(false)
+    setFeedback({
+      type: 'success',
+      text: 'Le profil restera disponible seulement pour cette session.',
+    })
+  }, [userSettings])
 
   const handleRoleSelection = useCallback(
     (role) => {
@@ -737,10 +735,6 @@ function App() {
 
     try {
       if (isSafeMode) {
-        console.log('Safe Mode - Simulated API Call:', {
-          user: userSettings,
-          potholes: selectedPotholes,
-        })
         setResultState({
           title: 'Simulation terminee',
           message: `${pointLabel(handledCount)} ${handledCount > 1 ? 'ont ete traites' : 'a ete traite'} sans envoi reel.`,
@@ -938,10 +932,30 @@ function App() {
             </div>
 
             {userSettings && !isEditingProfile ? (
-              <div className="profile-summary">
-                <p className="profile-name">{formatDisplayName(userSettings)}</p>
-                <p className="profile-email">{userSettings.email}</p>
-              </div>
+              <>
+                <div className="profile-summary">
+                  <p className="profile-name">{formatDisplayName(userSettings)}</p>
+                  <p className="profile-email">{userSettings.email}</p>
+                </div>
+
+                <div className="profile-retention">
+                  <p className="inline-note">
+                    {rememberProfile
+                      ? `Le profil est memorise sur cet appareil pendant ${PROFILE_REMEMBER_DURATION_DAYS} jours.`
+                      : "Le profil est conserve seulement pour cette session sur cet appareil."}
+                  </p>
+
+                  {rememberProfile && (
+                    <button
+                      type="button"
+                      className="inline-link"
+                      onClick={keepProfileForSessionOnly}
+                    >
+                      Conserver seulement pour cette session
+                    </button>
+                  )}
+                </div>
+              </>
             ) : (
               <div className="profile-form-grid">
                 <label className="field">
@@ -986,6 +1000,23 @@ function App() {
                   />
                   {profileErrors.email && <span className="field-error">{profileErrors.email}</span>}
                 </label>
+
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={rememberProfile}
+                    onChange={(event) => setRememberProfile(event.target.checked)}
+                  />
+                  <span>
+                    Garder ce profil sur cet appareil pendant {PROFILE_REMEMBER_DURATION_DAYS}{' '}
+                    jours.
+                  </span>
+                </label>
+
+                <p className="field-hint">
+                  Sans cette option, le profil reste disponible seulement pour la session en
+                  cours.
+                </p>
               </div>
             )}
           </form>
