@@ -20,8 +20,9 @@
 - Build production artifacts: `npm run build`
 - Preview production build: `npm run preview`
 - Run lint checks: `npm run lint`
+- Run tests: `npm test`
 - Run formatters/autofix: `npm run lint -- --fix`
-- Run tests: No dedicated test script is configured; use `npm run lint && npm run build` as required pre-merge verification.
+- Required pre-merge verification: `npm test && npm run lint && npm run build`
 
 ## Workflow Rules
 

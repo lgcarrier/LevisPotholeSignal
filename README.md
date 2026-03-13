@@ -102,6 +102,12 @@ La soumission est effectuée par `src/App.jsx` via:
   `https://services1.arcgis.com/niuNnVx0H92jOc5F/arcgis/rest/services/NidDePouleSignale/FeatureServer/0/applyEdits`
 - Méthode: `POST`
 - Format: `application/x-www-form-urlencoded`
+- Géométrie:
+  - les positions GPS restent en latitude/longitude dans l'interface
+  - la soumission projette chaque point en Web Mercator (`wkid: 102100`) au moment de l'envoi
+- Profil:
+  - l'application collecte `Prenom`, `Nom de famille` et `Courriel`
+  - l'attribut ArcGIS `Nom` est envoye au format `Nom de famille + Prenom`
 - Attributs envoyés:
   - `Nom`
   - `courriel`
@@ -129,9 +135,10 @@ src/
 
 ## Vérification avant contribution
 
-Le projet n'a pas de suite de tests automatisés pour le moment. Vérification minimale recommandée:
+Le projet inclut un test Node léger pour la projection ArcGIS. Vérification recommandée:
 
 ```bash
+npm test
 npm run lint
 npm run build
 ```

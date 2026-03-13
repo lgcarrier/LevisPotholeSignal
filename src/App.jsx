@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PassengerConfirmationModal from './components/PassengerConfirmationModal'
+import { buildArcGisAddsPayload, isSuccessfulArcGisAddResponse } from './utils/arcgis'
 import {
   MOVEMENT_SPEED_THRESHOLD_KMH,
   MOVEMENT_SPEED_THRESHOLD_MPS,
@@ -14,7 +15,7 @@ const REAL_SUBMISSION_ENABLED = import.meta.env.VITE_ALLOW_REAL_SUBMISSION === '
 const PROFILE_STORAGE_KEY = 'userSettings'
 const SAFETY_CONSENT_STORAGE_KEY = 'safetyConsent.v1'
 const TEST_POINT_BASE = { latitude: 46.8123, longitude: -71.1776 }
-const INITIAL_PROFILE = { name: '', email: '' }
+const INITIAL_PROFILE = { firstName: '', lastName: '', email: '' }
 
 const GPS_WARMUP_OPTIONS = { enableHighAccuracy: true, timeout: 10000 }
 const LOG_CAPTURE_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
@@ -69,17 +70,26 @@ function readSavedProfile() {
     }
 
     const parsedSettings = JSON.parse(savedSettings)
-    if (!parsedSettings?.name || !parsedSettings?.email) {
+    if (!parsedSettings?.firstName || !parsedSettings?.lastName || !parsedSettings?.email) {
       return null
     }
 
     return {
-      name: parsedSettings.name,
+      firstName: parsedSettings.firstName,
+      lastName: parsedSettings.lastName,
       email: parsedSettings.email,
     }
   } catch {
     return null
   }
+}
+
+function formatDisplayName(profile) {
+  return [profile?.firstName?.trim(), profile?.lastName?.trim()].filter(Boolean).join(' ')
+}
+
+function hasCompleteProfile(profile) {
+  return Boolean(profile?.firstName?.trim() && profile?.lastName?.trim() && profile?.email?.trim())
 }
 
 function readSavedSession() {
@@ -138,8 +148,12 @@ function modeSummaryLabel(isSafeMode) {
 function validateProfile(profile) {
   const nextErrors = {}
 
-  if (!profile?.name?.trim()) {
-    nextErrors.name = 'Le nom complet est requis.'
+  if (!profile?.firstName?.trim()) {
+    nextErrors.firstName = 'Le prenom est requis.'
+  }
+
+  if (!profile?.lastName?.trim()) {
+    nextErrors.lastName = 'Le nom de famille est requis.'
   }
 
   if (!profile?.email?.trim()) {
@@ -183,7 +197,8 @@ function App() {
   const movementSampleRef = useRef(null)
   const passengerConfirmedRef = useRef(false)
   const movementNotifiedRef = useRef(false)
-  const nameInputRef = useRef(null)
+  const firstNameInputRef = useRef(null)
+  const lastNameInputRef = useRef(null)
   const emailInputRef = useRef(null)
 
   const isSafeMode = simulationMode || !REAL_SUBMISSION_ENABLED
@@ -357,8 +372,13 @@ function App() {
   }, [])
 
   const focusFirstProfileError = useCallback((errors) => {
-    if (errors.name) {
-      window.setTimeout(() => nameInputRef.current?.focus(), 0)
+    if (errors.firstName) {
+      window.setTimeout(() => firstNameInputRef.current?.focus(), 0)
+      return
+    }
+
+    if (errors.lastName) {
+      window.setTimeout(() => lastNameInputRef.current?.focus(), 0)
       return
     }
 
@@ -383,7 +403,8 @@ function App() {
 
   const saveProfile = useCallback((profile) => {
     const normalizedProfile = {
-      name: profile.name.trim(),
+      firstName: profile.firstName.trim(),
+      lastName: profile.lastName.trim(),
       email: profile.email.trim(),
     }
 
@@ -418,7 +439,7 @@ function App() {
       }
 
       setScreen('setup')
-      setIsEditingProfile(!(userSettings?.name && userSettings?.email))
+      setIsEditingProfile(!hasCompleteProfile(userSettings))
     },
     [persistSessionChoice, resetTravelSafetyState, userSettings]
   )
@@ -623,18 +644,7 @@ function App() {
         return
       }
 
-      const data = selectedPotholes.map((pothole) => ({
-        geometry: {
-          x: pothole.longitude,
-          y: pothole.latitude,
-          spatialReference: { wkid: 102100 },
-        },
-        attributes: {
-          Nom: userSettings.name,
-          courriel: userSettings.email,
-          Statut: 'Signale',
-        },
-      }))
+      const data = buildArcGisAddsPayload(selectedPotholes, userSettings)
 
       const encodedData = encodeURIComponent(JSON.stringify(data))
       const body = `f=json&adds=${encodedData}`
@@ -645,7 +655,7 @@ function App() {
         body,
       })
       const result = await response.json()
-      if (result.addResults?.every((entry) => entry.success)) {
+      if (response.ok && isSuccessfulArcGisAddResponse(result, handledCount)) {
         setResultState({
           title: 'Signalement envoye',
           message: `${pointLabel(handledCount)} ${handledCount > 1 ? 'ont ete envoyes' : 'a ete envoye'} vers ArcGIS.`,
@@ -657,7 +667,7 @@ function App() {
       } else {
         setFeedback({
           type: 'error',
-          text: 'Erreur lors du signalement des nids-de-poule.',
+          text: result?.error?.message || 'Erreur lors du signalement des nids-de-poule.',
         })
       }
     } catch (error) {
@@ -792,22 +802,39 @@ function App() {
 
             {userSettings && !isEditingProfile ? (
               <div className="profile-summary">
-                <p className="profile-name">{userSettings.name}</p>
+                <p className="profile-name">{formatDisplayName(userSettings)}</p>
                 <p className="profile-email">{userSettings.email}</p>
               </div>
             ) : (
               <div className="profile-form-grid">
                 <label className="field">
-                  <span>Nom complet</span>
+                  <span>Prenom</span>
                   <input
-                    ref={nameInputRef}
+                    ref={firstNameInputRef}
                     type="text"
-                    placeholder="Nom complet"
-                    value={profileDraft.name}
-                    onChange={(event) => handleProfileChange('name', event.target.value)}
-                    aria-invalid={Boolean(profileErrors.name)}
+                    placeholder="Prenom"
+                    value={profileDraft.firstName}
+                    onChange={(event) => handleProfileChange('firstName', event.target.value)}
+                    aria-invalid={Boolean(profileErrors.firstName)}
                   />
-                  {profileErrors.name && <span className="field-error">{profileErrors.name}</span>}
+                  {profileErrors.firstName && (
+                    <span className="field-error">{profileErrors.firstName}</span>
+                  )}
+                </label>
+
+                <label className="field">
+                  <span>Nom de famille</span>
+                  <input
+                    ref={lastNameInputRef}
+                    type="text"
+                    placeholder="Nom de famille"
+                    value={profileDraft.lastName}
+                    onChange={(event) => handleProfileChange('lastName', event.target.value)}
+                    aria-invalid={Boolean(profileErrors.lastName)}
+                  />
+                  {profileErrors.lastName && (
+                    <span className="field-error">{profileErrors.lastName}</span>
+                  )}
                 </label>
 
                 <label className="field">
@@ -991,7 +1018,7 @@ function App() {
           <StatusBadge tone={resultState?.mode === 'live' ? 'accent' : 'safe'}>
             {resultState?.mode === 'live' ? 'Envoi confirme' : 'Mode simulation'}
           </StatusBadge>
-          <StatusBadge tone="neutral">{userSettings?.name || 'Profil conserve'}</StatusBadge>
+          <StatusBadge tone="neutral">{formatDisplayName(userSettings) || 'Profil conserve'}</StatusBadge>
         </div>
       </>
     )

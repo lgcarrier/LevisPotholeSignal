@@ -1,22 +1,27 @@
 import { useEffect, useState } from 'react'
 
 function Settings({ onSave, initialSettings }) {
-  const [name, setName] = useState(initialSettings.name)
+  const [firstName, setFirstName] = useState(initialSettings.firstName)
+  const [lastName, setLastName] = useState(initialSettings.lastName)
   const [email, setEmail] = useState(initialSettings.email)
   const [errors, setErrors] = useState({})
 
   useEffect(() => {
-    setName(initialSettings.name)
+    setFirstName(initialSettings.firstName)
+    setLastName(initialSettings.lastName)
     setEmail(initialSettings.email)
     setErrors({})
-  }, [initialSettings.email, initialSettings.name])
+  }, [initialSettings.email, initialSettings.firstName, initialSettings.lastName])
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const nextErrors = {}
 
-    if (!name.trim()) {
-      nextErrors.name = 'Le nom est requis.'
+    if (!firstName.trim()) {
+      nextErrors.firstName = 'Le prenom est requis.'
+    }
+    if (!lastName.trim()) {
+      nextErrors.lastName = 'Le nom de famille est requis.'
     }
     if (!email.trim()) {
       nextErrors.email = 'Le courriel est requis.'
@@ -27,22 +32,34 @@ function Settings({ onSave, initialSettings }) {
     setErrors(nextErrors)
 
     if (!Object.keys(nextErrors).length) {
-      onSave({ name: name.trim(), email: email.trim() })
+      onSave({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim() })
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="settings">
       <label className="field">
-        <span>Nom complet</span>
+        <span>Prenom</span>
         <input
           type="text"
-          placeholder="Nom complet"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          aria-invalid={Boolean(errors.name)}
+          placeholder="Prenom"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          aria-invalid={Boolean(errors.firstName)}
         />
-        {errors.name && <span className="field-error">{errors.name}</span>}
+        {errors.firstName && <span className="field-error">{errors.firstName}</span>}
+      </label>
+
+      <label className="field">
+        <span>Nom de famille</span>
+        <input
+          type="text"
+          placeholder="Nom de famille"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          aria-invalid={Boolean(errors.lastName)}
+        />
+        {errors.lastName && <span className="field-error">{errors.lastName}</span>}
       </label>
 
       <label className="field">

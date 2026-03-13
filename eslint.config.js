@@ -30,4 +30,13 @@ export default [
       ],
     },
   },
+  {
+    files: ['test/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+  },
 ]
