@@ -411,6 +411,107 @@ button:focus-visible {
   gap: var(--space-2);
 }
 
+.map-preview-card {
+  gap: var(--space-3);
+}
+
+.map-preview-header {
+  align-items: start;
+}
+
+.map-preview-note {
+  max-width: 15rem;
+  color: var(--text-muted);
+  line-height: 1.38;
+}
+
+.map-preview-canvas {
+  min-height: 16rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08)),
+    #d7e4f5;
+}
+
+.map-preview-canvas.empty {
+  opacity: 0.76;
+}
+
+.map-preview-canvas .leaflet-control-attribution {
+  font-size: 0.68rem;
+}
+
+.map-preview-canvas .leaflet-popup-content-wrapper,
+.map-preview-canvas .leaflet-popup-tip {
+  box-shadow: 0 12px 28px rgba(18, 32, 53, 0.18);
+}
+
+.map-point-marker-shell {
+  background: transparent;
+  border: 0;
+}
+
+.map-point-marker {
+  width: 2.375rem;
+  height: 2.375rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1d6be8 0%, #0d4aad 100%);
+  border: 3px solid #ffffff;
+  box-shadow: 0 10px 20px rgba(18, 32, 53, 0.2);
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.map-point-marker.active {
+  background: linear-gradient(180deg, #176a42 0%, #0f5633 100%);
+  box-shadow: 0 12px 24px rgba(23, 106, 66, 0.24);
+}
+
+.map-edit-panel,
+.map-preview-links {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.map-edit-actions,
+.map-point-actions {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.map-point-actions.editing {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: #eef4ff;
+  border: 1px solid rgba(22, 95, 215, 0.22);
+}
+
+.map-point-chip.active {
+  background: #eef4ff;
+  border-color: rgba(22, 95, 215, 0.35);
+  color: var(--accent-strong);
+}
+
+.map-point-link {
+  text-decoration: none;
+}
+
+.map-point-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--info-soft);
+  color: var(--info);
+  font-weight: 700;
+}
+
 .summary-list {
   display: grid;
   gap: var(--space-2);
@@ -427,6 +528,11 @@ button:focus-visible {
   background: var(--surface-soft);
 }
 
+.summary-item.editing {
+  border-color: rgba(22, 95, 215, 0.35);
+  background: #eef4ff;
+}
+
 .summary-item input {
   margin-top: 0.25rem;
 }
@@ -439,6 +545,17 @@ button:focus-visible {
 
 .summary-item-text strong {
   color: var(--text-main);
+}
+
+.summary-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.draft-tag {
+  color: var(--accent-strong);
+  font-weight: 800;
 }
 
 .simulated-tag {
@@ -636,6 +753,12 @@ button:focus-visible {
   }
 }
 
+@media (max-width: 759px) {
+  .screen-review .screen-shell {
+    overflow-y: auto;
+  }
+}
+
 @media (max-width: 430px) {
   .screen-shell {
     gap: 0.85rem;
@@ -683,6 +806,15 @@ button:focus-visible {
   .row-between {
     flex-direction: column;
     align-items: start;
+  }
+
+  .map-preview-canvas {
+    min-height: 14rem;
+  }
+
+  .map-edit-actions,
+  .map-point-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .status-badge {

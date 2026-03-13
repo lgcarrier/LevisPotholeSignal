@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PassengerConfirmationModal from './components/PassengerConfirmationModal'
+import PotholeMapPreview from './components/PotholeMapPreview'
 import { buildArcGisAddsPayload, isSuccessfulArcGisAddResponse } from './utils/arcgis'
+import { updatePotholePosition } from './utils/potholes'
 import {
   MOVEMENT_SPEED_THRESHOLD_KMH,
   MOVEMENT_SPEED_THRESHOLD_MPS,
@@ -145,6 +147,10 @@ function modeSummaryLabel(isSafeMode) {
   return isSafeMode ? 'Mode simulation' : 'Mode reel'
 }
 
+function formatPointCoordinates(point) {
+  return `Lat: ${point.latitude.toFixed(4)}, Long: ${point.longitude.toFixed(4)}`
+}
+
 function validateProfile(profile) {
   const nextErrors = {}
 
@@ -182,6 +188,8 @@ function App() {
   const [showSimulationTools, setShowSimulationTools] = useState(false)
   const [reviewExpanded, setReviewExpanded] = useState(false)
   const [resultState, setResultState] = useState(null)
+  const [editingPointIndex, setEditingPointIndex] = useState(null)
+  const [editingDraftPosition, setEditingDraftPosition] = useState(null)
 
   const [gpsStatus, setGpsStatus] = useState('initializing')
   const [feedback, setFeedback] = useState(null)
@@ -208,6 +216,31 @@ function App() {
     () => potholes.filter((_, index) => selectedIndexes.includes(index)),
     [potholes, selectedIndexes]
   )
+  const selectedMapPoints = useMemo(
+    () =>
+      potholes.flatMap((pothole, index) =>
+        selectedIndexes.includes(index)
+          ? [
+              {
+                ...pothole,
+                latitude:
+                  editingPointIndex === index && editingDraftPosition
+                    ? editingDraftPosition.latitude
+                    : pothole.latitude,
+                longitude:
+                  editingPointIndex === index && editingDraftPosition
+                    ? editingDraftPosition.longitude
+                    : pothole.longitude,
+                label: `Point ${index + 1}`,
+                shortLabel: String(index + 1),
+                sourceIndex: index,
+              },
+            ]
+          : []
+      ),
+    [editingDraftPosition, editingPointIndex, potholes, selectedIndexes]
+  )
+  const editingPointLabel = editingPointIndex !== null ? `Point ${editingPointIndex + 1}` : null
   const isMovementLocked = movementState === 'moving'
   const canLog = isTraveling && !isMovementLocked
 
@@ -290,6 +323,21 @@ function App() {
   }, [isTraveling, potholes])
 
   useEffect(() => {
+    if (editingPointIndex === null) {
+      return
+    }
+
+    if (
+      screen !== 'review' ||
+      !selectedIndexes.includes(editingPointIndex) ||
+      !potholes[editingPointIndex]
+    ) {
+      setEditingPointIndex(null)
+      setEditingDraftPosition(null)
+    }
+  }, [editingPointIndex, potholes, screen, selectedIndexes])
+
+  useEffect(() => {
     if (!isTraveling || !navigator.geolocation) {
       return undefined
     }
@@ -356,11 +404,17 @@ function App() {
     }
   }, [isTraveling])
 
+  const resetPointEditing = useCallback(() => {
+    setEditingPointIndex(null)
+    setEditingDraftPosition(null)
+  }, [])
+
   const clearCapturedPotholes = useCallback(() => {
     setPotholes([])
     setSelectedIndexes([])
     setReviewExpanded(false)
-  }, [])
+    resetPointEditing()
+  }, [resetPointEditing])
 
   const resetTravelSafetyState = useCallback(() => {
     setMovementState('stationary')
@@ -600,6 +654,62 @@ function App() {
     setSelectedIndexes([])
   }, [])
 
+  const beginPointEdit = useCallback(
+    (index) => {
+      if (editingPointIndex !== null && editingPointIndex !== index) {
+        return
+      }
+
+      if (editingPointIndex === index && editingDraftPosition) {
+        return
+      }
+
+      const pothole = potholes[index]
+      if (!pothole) {
+        return
+      }
+
+      setReviewExpanded(true)
+      setEditingPointIndex(index)
+      setEditingDraftPosition({
+        latitude: pothole.latitude,
+        longitude: pothole.longitude,
+      })
+    },
+    [editingDraftPosition, editingPointIndex, potholes]
+  )
+
+  const updatePointDraft = useCallback(
+    (index, coordinates) => {
+      if (editingPointIndex !== index) {
+        return
+      }
+
+      setEditingDraftPosition({
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      })
+    },
+    [editingPointIndex]
+  )
+
+  const cancelPointMove = useCallback(() => {
+    resetPointEditing()
+  }, [resetPointEditing])
+
+  const confirmPointMove = useCallback(() => {
+    if (editingPointIndex === null || !editingDraftPosition) {
+      return
+    }
+
+    setPotholes((current) => updatePotholePosition(current, editingPointIndex, editingDraftPosition))
+    setFeedback({
+      type: 'success',
+      text: `${editingPointLabel} mis a jour sur la carte.`,
+    })
+    resetPointEditing()
+  }, [editingDraftPosition, editingPointIndex, editingPointLabel, resetPointEditing])
+
   const beginNewReport = useCallback(() => {
     clearCapturedPotholes()
     setResultState(null)
@@ -608,7 +718,7 @@ function App() {
   }, [clearCapturedPotholes])
 
   const reportSelectedPotholes = useCallback(async () => {
-    if (!selectedPotholes.length || isSubmitting) {
+    if (!selectedPotholes.length || isSubmitting || editingPointIndex !== null) {
       return
     }
 
@@ -678,7 +788,14 @@ function App() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [clearCapturedPotholes, isSafeMode, isSubmitting, selectedPotholes, userSettings])
+  }, [
+    clearCapturedPotholes,
+    editingPointIndex,
+    isSafeMode,
+    isSubmitting,
+    selectedPotholes,
+    userSettings,
+  ])
 
   const screenContent = (() => {
     if (screen === 'entry') {
@@ -942,6 +1059,9 @@ function App() {
             <p className="section-copy">
               La selection complete est activee par defaut pour aller plus vite.
             </p>
+            {editingPointLabel && (
+              <p className="inline-note">Ajustez {editingPointLabel}, puis confirmez le nouvel emplacement.</p>
+            )}
             <button
               type="button"
               className="secondary-chip"
@@ -950,6 +1070,16 @@ function App() {
               {reviewExpanded ? 'Masquer le detail' : 'Modifier la selection'}
             </button>
           </section>
+
+          <PotholeMapPreview
+            points={selectedMapPoints}
+            editingPointIndex={editingPointIndex}
+            editingDraftPosition={editingDraftPosition}
+            onBeginPointEdit={beginPointEdit}
+            onUpdatePointDraft={updatePointDraft}
+            onConfirmPointMove={confirmPointMove}
+            onCancelPointMove={cancelPointMove}
+          />
 
           {reviewExpanded && (
             <section className="surface-card review-card">
@@ -964,7 +1094,10 @@ function App() {
 
               <div className="summary-list">
                 {potholes.map((pothole, index) => (
-                  <label key={index} className="summary-item">
+                  <label
+                    key={index}
+                    className={`summary-item ${editingPointIndex === index ? 'editing' : ''}`}
+                  >
                     <input
                       type="checkbox"
                       checked={selectedIndexes.includes(index)}
@@ -973,9 +1106,18 @@ function App() {
                     <span className="summary-item-text">
                       <strong>Point {index + 1}</strong>
                       <span>
-                        Lat: {pothole.latitude.toFixed(4)}, Long: {pothole.longitude.toFixed(4)}
+                        {formatPointCoordinates(
+                          editingPointIndex === index && editingDraftPosition
+                            ? editingDraftPosition
+                            : pothole
+                        )}
                       </span>
-                      {pothole.simulated && <span className="simulated-tag">Point simule</span>}
+                      <span className="summary-item-meta">
+                        {editingPointIndex === index && (
+                          <span className="draft-tag">Ajustement en cours</span>
+                        )}
+                        {pothole.simulated && <span className="simulated-tag">Point simule</span>}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -1064,7 +1206,7 @@ function App() {
               ? `Simuler la liste (${selectedCount})`
               : `Soumettre la liste (${selectedCount})`,
           onClick: reportSelectedPotholes,
-          disabled: selectedCount === 0 || isSubmitting,
+          disabled: selectedCount === 0 || isSubmitting || editingPointIndex !== null,
           tone: isSafeMode ? 'safe' : 'accent',
         },
       }
