@@ -1,0 +1,97 @@
+name: Rapport de bogue
+description: Signaler un probleme observe dans le flux de capture, GPS ou soumission.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de decrire le probleme avec assez de contexte pour reproduire le flux complet.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resume du bogue
+      description: Qu'est-ce qui ne fonctionne pas ?
+      placeholder: Le verrou de mouvement reste actif meme apres confirmation du passager.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Etapes pour reproduire
+      description: Listez le parcours dans l'application ecran par ecran.
+      placeholder: |
+        1. Ouvrir l'application sur mobile
+        2. Choisir "Je suis passager"
+        3. Commencer le parcours
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultat attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultat observe
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Navigateur
+      options:
+        - Chrome
+        - Safari
+        - Firefox
+        - Edge
+        - Autre
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Appareil et systeme
+      description: Exemple: iPhone 14 / iOS 18, Pixel 8 / Android 16, MacBook / macOS.
+      placeholder: iPhone 14 / iOS 18.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: geolocation_permission
+    attributes:
+      label: Etat de la permission de geolocalisation
+      options:
+        - Autorisee
+        - Refusee
+        - Invite navigateur encore ouverte
+        - Inconnue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: submission_mode
+    attributes:
+      label: Mode de soumission
+      options:
+        - Simulation (`VITE_ALLOW_REAL_SUBMISSION=false`)
+        - Soumission reelle activee
+        - Je ne sais pas
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Captures, logs ou notes supplementaires
+      description: Ajoutez toute information utile pour accelerer le diagnostic.

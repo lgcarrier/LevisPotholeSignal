@@ -64,6 +64,16 @@ function ScreenHeader({ title, copy }) {
   )
 }
 
+function AdvisoryNotice({ title, children }) {
+  return (
+    <section className="surface-card tone-warning">
+      <p className="section-kicker">Avis important</p>
+      <h2>{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 function readSavedProfile() {
   try {
     const savedSettings = localStorage.getItem(PROFILE_STORAGE_KEY)
@@ -825,6 +835,16 @@ function App() {
             </div>
           </section>
 
+          <AdvisoryNotice title="Projet independant non officiel">
+            <p className="section-copy">
+              Cette application n'est pas affiliee ni approuvee par la Ville de Levis.
+            </p>
+            <p className="section-copy">
+              Utilisez-la seulement lorsque le vehicule est immobilise. Pour un signalement
+              officiel, utilisez l'interface de la Ville de Levis.
+            </p>
+          </AdvisoryNotice>
+
           {sessionRole === 'driver' && (
             <section className="surface-card tone-warning">
               <p className="section-kicker">Protection</p>
@@ -1129,6 +1149,18 @@ function App() {
             <p className="inline-note warning">
               Selectionnez au moins un point avant de continuer.
             </p>
+          )}
+
+          {!isSafeMode && (
+            <AdvisoryNotice title="Avant de transmettre la liste">
+              <p className="section-copy">
+                Vous etes sur le point de transmettre des donnees a un service municipal externe.
+              </p>
+              <p className="section-copy">
+                Projet independant non officiel. Verifiez que le vehicule est immobilise avant de
+                poursuivre. Pour un usage officiel, privilegiez l'interface de la Ville de Levis.
+              </p>
+            </AdvisoryNotice>
           )}
         </>
       )

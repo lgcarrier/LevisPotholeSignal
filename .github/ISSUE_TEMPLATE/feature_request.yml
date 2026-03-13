@@ -1,0 +1,43 @@
+name: Demande de fonctionnalite
+description: Proposer une amelioration produit ou technique pour l'application.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Besoin
+      description: Quelle fonctionnalite souhaitez-vous ajouter ou ameliorer ?
+      placeholder: Ajouter une verification plus visible du mode simulation avant la soumission finale.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Probleme a resoudre
+      description: Quel probleme utilisateur ou mainteneur ce changement regle-t-il ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposition
+      description: Decrivez l'approche imaginee ou le comportement attendu.
+    validations:
+      required: true
+
+  - type: textarea
+    id: flow
+    attributes:
+      label: Impact sur le flux
+      description: A quel moment du parcours mobile cela intervient-il ?
+      placeholder: Ecran d'entree, preparation du trajet, parcours actif, revision, resultat...
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Contraintes, risques ou references
+      description: Mentionnez les contraintes GPS, ArcGIS, UX mobile ou liens utiles.

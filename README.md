@@ -14,6 +14,16 @@ L'utilisation de ce logiciel se fait entièrement aux risques de l'utilisateur, 
 
 Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsables des dommages, pertes, incidents, interruptions de service, erreurs de données ou conséquences légales pouvant résulter de son utilisation, de sa modification ou de sa redistribution.
 
+## Non-affiliation et utilisation prudente
+
+Projet independant non officiel. Cette application n'est pas affiliee, approuvee ni maintenue par la Ville de Levis.
+
+Utilisez cette application uniquement lorsque le vehicule est immobilise et en respectant les regles de securite routiere applicables. Pour un usage officiel, consultez les interfaces de la Ville de Levis.
+
+Les donnees et services municipaux eventuellement utilises par cette application demeurent assujettis aux conditions d'utilisation applicables de la Ville de Levis.
+
+La collecte de nom, courriel et position GPS dans cette application releve de ce projet et non de la politique de confidentialite de la Ville pour ses interfaces officielles.
+
 ## Fonctionnalités actuelles
 
 - Parcours mobile simplifie en 5 ecrans:
@@ -70,17 +80,27 @@ Les auteurs, mainteneurs et contributeurs ne peuvent pas être tenus responsable
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
 L'application sera disponible sur l'URL locale affichée par Vite (habituellement `http://localhost:5173`).
 
+Par defaut, `.env.example` garde `VITE_ALLOW_REAL_SUBMISSION=false`. Conservez ce mode simulation pour le developpement et les validations courantes afin d'eviter des envois ArcGIS reels inutiles.
+
 ## Scripts disponibles
 
 - `npm run dev`: démarre le serveur de développement.
+- `npm test`: exécute les tests Node du projet.
 - `npm run build`: génère le build de production dans `dist/`.
 - `npm run preview`: sert localement le build de production.
 - `npm run lint`: exécute ESLint sur le projet.
+
+## Collaboration
+
+Consultez [CONTRIBUTING.md](./CONTRIBUTING.md) pour les consignes de contribution, le workflow recommande et les validations manuelles attendues autour du GPS et d'ArcGIS.
+
+GitHub Actions execute `npm test`, `npm run lint` et `npm run build` sur chaque pull request et sur chaque push vers `main`.
 
 ## Flux utilisateur
 
@@ -145,6 +165,8 @@ npm run build
 
 Puis validation manuelle en navigateur pour les scénarios GPS et soumission.
 
+Les consignes de pull request, d'issues et de validation manuelle detaillee sont centralisees dans `CONTRIBUTING.md` et dans les modeles GitHub du depot.
+
 ## Déploiement
 
 Netlify est configuré avec:
@@ -154,7 +176,7 @@ Netlify est configuré avec:
 
 ## Limites connues
 
-- Aucun test automatisé n'est configuré dans `package.json`.
+- Les tests automatises couvrent actuellement la projection ArcGIS et la composition du payload, mais pas encore tout le flux React/GPS en navigateur.
 - Endpoint ArcGIS codé en dur dans `src/App.jsx`.
 - Aucune file d'attente hors-ligne pour les signalements.
 
